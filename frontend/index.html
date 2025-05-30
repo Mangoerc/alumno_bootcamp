@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestor de Calificaciones</title>
+  <style>
+    body {
+      padding: 20px 60px;
+      font-family: sans-serif;
+      font-size: 1.2rem;
+      position: relative;
+    }
+    input, button, select {
+      margin: 5px;
+      padding: 8px;
+      font-size: 1rem;
+    }
+    pre, p, table {
+      background: #f0f0f0;
+      padding: 10px;
+      border-radius: 5px;
+      white-space: pre-wrap;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #eee;
+    }
+    #grafica {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 150px;
+      height: 150px;
+    }
+  </style>
+  <script type="module">
+    import { backend } from 'declarations/backend';
+
+    async function crearRegistro() {
+      const alumno = document.getElementById("alumno").value;
+      const materia = document.getElementById("materia").value;
+      const calificacion = document.getElementById("calificacion").value;
+      await backend.crear_registro(calificacion, materia, alumno);
+      alert("Calificación agregada con éxito");
+    }
+
+    async function obtenerAlumno() {
+      const alumno = document.getElementById("consultaAlumno").value;
+      const resultadoTexto = await backend.obtener_alumno(alumno);
+
+      const lineas = resultadoTexto.trim().split("\n");
+      const json = lineas.map(linea => {
+        const [parteMateria, calificacion] = linea.split(", Calificación: ");
+        const materia = parteMateria.replace("Materia: ", "").trim();
+        return { materia, calificacion: parseFloat(calificacion?.trim() || "0") };
+      });
+
+      const promedio = json.reduce((acc, c) => acc + c.calificacion, 0) / json.length;
+
+      document.getElementById("resultado").innerText = JSON.stringify(json, null, 2);
+      actualizarGrafica(promedio);
+    }
+
+    function actualizarGrafica(promedio) {
+      const canvas = document.getElementById("grafica");
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#ddd";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const altura = (promedio / 10) * canvas.height;
+      ctx.fillStyle = promedio >= 9 ? "green" : promedio >= 7 ? "orange" : "red";
+      ctx.fillRect(0, canvas.height - altura, canvas.width, altura);
+
+      ctx.fillStyle = "black";
+      ctx.font = "20px sans-serif";
+      ctx.fillText("Promedio", 20, 20);
+      ctx.fillText(promedio.toFixed(2), 45, canvas.height / 2);
+    }
+
+    async function darDeBaja() {
+      const alumno = document.getElementById("consultaAlumno").value;
+      const respuesta = await backend.dar_de_baja(alumno);
+      alert(respuesta);
+    }
+
+    async function borrarMateria() {
+      const alumno = document.getElementById("consultaAlumno").value;
+      const materia = prompt("¿Qué materia deseas eliminar?");
+      if (materia) {
+        const respuesta = await backend.borrar_materia(alumno, materia);
+        alert(respuesta);
+      }
+    }
+
+    async function obtenerEstudiantes() {
+      const lista = await backend.obtener_estudiantes();
+      document.getElementById("estudiantes").innerText = lista.join("\n");
+    }
+
+    async function mostrarTabla() {
+      const alumnos = await backend.obtener_estudiantes();
+      const tabla = document.getElementById("tablaCalificaciones");
+      tabla.innerHTML = "<tr><th>Alumno</th><th>Materia</th><th>Calificación</th><th>Promedio</th><th>Evaluación</th></tr>";
+
+      for (const alumno of alumnos) {
+        const resultadoTexto = await backend.obtener_alumno(alumno);
+        const lineas = resultadoTexto.trim().split("\n");
+        const calificaciones = [];
+
+        for (const linea of lineas) {
+          const [parteMateria, calificacionStr] = linea.split(", Calificación: ");
+          if (!parteMateria || !calificacionStr) continue;
+          const materia = parteMateria.replace("Materia: ", "").trim();
+          const calificacion = parseFloat(calificacionStr.trim());
+          calificaciones.push({ materia, calificacion });
+        }
+
+        if (calificaciones.length === 0) continue;
+
+        const promedio = calificaciones.reduce((acc, c) => acc + c.calificacion, 0) / calificaciones.length;
+        let evaluacion = promedio >= 9 ? "Excelente" : promedio >= 7 ? "Bueno" : "Deficiente";
+
+        for (const c of calificaciones) {
+          const row = document.createElement("tr");
+          row.innerHTML = `<td>${alumno}</td><td>${c.materia}</td><td>${c.calificacion}</td><td>${promedio.toFixed(2)}</td><td>${evaluacion}</td>`;
+          tabla.appendChild(row);
+        }
+      }
+    }
+
+    window.crearRegistro = crearRegistro;
+    window.obtenerAlumno = obtenerAlumno;
+    window.darDeBaja = darDeBaja;
+    window.borrarMateria = borrarMateria;
+    window.obtenerEstudiantes = obtenerEstudiantes;
+    window.mostrarTabla = mostrarTabla;
+  </script>
+</head>
+<body>
+  <canvas id="grafica"></canvas>
+  <main>
+    <h1>Gestor de Calificaciones</h1>
+
+    <h2>Registrar Calificación</h2>
+    <input type="text" id="alumno" placeholder="Alumno" />
+    <input type="text" id="materia" placeholder="Materia" />
+    <input type="text" id="calificacion" placeholder="Calificación" />
+    <button onclick="crearRegistro()">Agregar</button>
+
+    <h2>Consultar Alumno</h2>
+    <input type="text" id="consultaAlumno" placeholder="Nombre del Alumno" />
+    <button onclick="obtenerAlumno()">Ver Calificaciones</button>
+    <button onclick="darDeBaja()">Dar de Baja</button>
+    <button onclick="borrarMateria()">Borrar Materia</button>
+
+    <pre id="resultado"></pre>
+
+    <h2>Estudiantes Registrados</h2>
+    <button onclick="obtenerEstudiantes()">Ver Todos</button>
+    <p id="estudiantes"></p>
+
+    <h2>Tabla de Calificaciones</h2>
+    <button onclick="mostrarTabla()">Mostrar Tabla</button>
+    <table id="tablaCalificaciones"></table>
+  </main>
+</body>
+</html>
+</html>
